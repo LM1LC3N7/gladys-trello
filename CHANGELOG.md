@@ -12,47 +12,24 @@ the notes of the version's GitHub Release.
 
 ### Added
 
-- A working example of scene triggers, scene actions and dashboard widgets
-  (Gladys 5.1.0 or later).
-- `CHANGELOG.md`, rolled by the Release workflow.
-- A GitHub Release for every version, with its changelog section as notes: the
-  Gladys Supervision page links each version to the repository's releases.
-- CI runs the tests on Node 22 and 24, and builds the Docker image.
-- Dependabot keeps the npm dependencies and the GitHub Actions up to date.
-- `SECURITY.md` (how to report a vulnerability) and `CLAUDE.md` (project rules
-  for contributors and coding assistants).
-- Manifest tests: `version` matches `package.json`, `docker_image` is tagged
-  with it, descriptions hold 10 to 100 characters, placeholders are
-  multi-language objects.
-- The latitude and longitude fields show an example value as placeholder.
-
-### Changed
-
-- Node.js 22 or later is required (Node 20 is end-of-life).
-- Integration SDK 0.16.0. The tests now run against the fake Gladys of the
-  SDK, which refuses the payloads Gladys refuses. A device published with a
-  `poll_frequency` is now polled without `should_poll: true` on a recent
-  core (an explicit `should_poll: false` opts out); the template keeps the
-  field explicit for the older cores.
-- The refresh interval is one minute minimum, the fastest Gladys polls a
-  device. The plug's power is only sent when it changes, and every 30
-  minutes otherwise.
-
-### Fixed
-
-- Gladys refused the devices of the Discovery tab: the weather station and
-  the plug declared their poll frequency in seconds instead of one of the
-  values Gladys accepts, and were never polled. They now poll every minute,
-  and the readings follow the refresh interval of the configuration.
-
-- The release commit no longer fails `npm run format:check`: the Release
-  workflow updates the manifest `version` and `docker_image` in place instead
-  of re-printing the whole file with `jq`.
-- The integration can write to `/data`: the image creates the directory owned
-  by the `node` user, a new Docker volume was owned by root.
-- A sub-container running the integration's own image follows it to the new
-  tag at each release, as well as in the manifest of the build summary: it kept
-  the previous tag, which may not exist on the registry. Sub-containers on a
-  third-party image (a broker, a database...) keep theirs.
-
-[Unreleased]: https://github.com/GladysAssistant/integration-template-js/commits/main
+- Trello boards through the official REST API (`api.trello.com/1`), with the API
+  key of a Power-Up and a token (Authorization header only): the boards named in
+  the configuration, or every open board (10 at most), read every 5 minutes by
+  default (2 to 60), the member and its boards once an hour.
+- Dashboard widget "Trello cards due": tiles overdue / due soon, the cards with
+  their board, list and due date, each opening its card.
+- Scene triggers "Trello card due" (once per card and due date, never for a due
+  already past when first read) and "Trello card moved" (not for the moves made
+  through Gladys).
+- Scene actions "Create a Trello card" (never sent twice; "unconfirmed" when
+  Trello does not answer), "Move a Trello card" (by link or name; "moved" only
+  when Trello answers with the card in the new list) and "Read the Trello cards
+  due".
+- Test button: the account, its open boards, the boards followed, the cards
+  overdue and due soon.
+- Pacing: one request in flight, 300 ms between two, 30 per 10 s at most; a 429
+  pauses every request (Retry-After, 60 s to 6 h, kept in /data); a board that
+  fails is read again later without stopping the others.
+- Refused credentials (a 401 on the member naming the key or the token) kept in
+  /data as 8 bits of a salted hash: nothing more is asked until they change or
+  the test button succeeds.

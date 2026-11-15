@@ -1,0 +1,212 @@
+[
+  {
+    "name": "config: bad token accepted",
+    "file": "src/config.js",
+    "from": "else if (!TOKEN.test(token)) problem = 'bad_token';",
+    "to": ""
+  },
+  {
+    "name": "config: bad key accepted",
+    "file": "src/config.js",
+    "from": "else if (!KEY.test(key)) problem = 'bad_key';",
+    "to": ""
+  },
+  {
+    "name": "config: more than 10 boards",
+    "file": "src/config.js",
+    "from": "if (refs.length >= MAX_BOARDS) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "http: body not bounded",
+    "file": "src/http.js",
+    "from": "    if (size > limit) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "http: any 401 names the token",
+    "file": "src/http.js",
+    "from": "  return undefined;\n}",
+    "to": "  return 'token';\n}"
+  },
+  {
+    "name": "http: connection refused counted as maybe sent",
+    "file": "src/http.js",
+    "from": "sent: NOT_SENT.has(code) ? false : 'unknown',",
+    "to": "sent: 'unknown',"
+  },
+  {
+    "name": "http: redirects followed",
+    "file": "src/http.js",
+    "from": "redirect: 'error',",
+    "to": "redirect: 'follow',"
+  },
+  {
+    "name": "trello: board identity not checked",
+    "file": "src/trello.js",
+    "from": "|| body.id !== expectedId",
+    "to": ""
+  },
+  {
+    "name": "trello: cards of archived lists kept",
+    "file": "src/trello.js",
+    "from": "if (lists && !lists.has(c.idList)) return undefined;",
+    "to": ""
+  },
+  {
+    "name": "trello: 1000 cards cap removed",
+    "file": "src/trello.js",
+    "from": "for (const raw of body.cards.slice(0, MAX_CARDS)) {",
+    "to": "for (const raw of body.cards) {"
+  },
+  {
+    "name": "triggers: stale due fired",
+    "file": "src/triggers.js",
+    "from": "if (card.due <= now - grace) marked.push(key);\n      else fresh.push({ board, card, key });",
+    "to": "fresh.push({ board, card, key });"
+  },
+  {
+    "name": "triggers: complete card fired",
+    "file": "src/triggers.js",
+    "from": "if (card.due === null || card.dueComplete || card.due > now) continue;",
+    "to": "if (card.due === null || card.due > now) continue;"
+  },
+  {
+    "name": "triggers: own move fires",
+    "file": "src/triggers.js",
+    "from": "if (own && own.list === card.idList && own.until > mono) continue;",
+    "to": ""
+  },
+  {
+    "name": "triggers: 20 events cap removed",
+    "file": "src/triggers.js",
+    "from": "fresh.slice(0, MAX_EVENTS)",
+    "to": "fresh"
+  },
+  {
+    "name": "app: refusal on any member 401",
+    "file": "src/app.js",
+    "from": "if (err instanceof TrelloError && err.code === 'unauthorized' && err.auth) {\n        await this.refuse(err.auth);",
+    "to": "if (err instanceof TrelloError && err.code === 'unauthorized') {\n        await this.refuse(err.auth ?? 'token');"
+  },
+  {
+    "name": "app: refused credentials asked again",
+    "file": "src/app.js",
+    "from": "if (!allowRefused && this.credentialsRefused()) return 'refused';",
+    "to": ""
+  },
+  {
+    "name": "app: pause ignored",
+    "file": "src/app.js",
+    "from": "if (this.pause && this.pause.due > this.monotonic()) return 'paused';",
+    "to": ""
+  },
+  {
+    "name": "app: pause not kept in /data",
+    "file": "src/app.js",
+    "from": "pause: { until: this.pause?.until ?? 0, step: this.pauseStep },",
+    "to": "pause: { until: 0, step: this.pauseStep },"
+  },
+  {
+    "name": "app: last attempt not saved before reading",
+    "file": "src/app.js",
+    "from": "      this.lastPollAt = this.now();\n      await this.save();",
+    "to": "      await this.save();"
+  },
+  {
+    "name": "app: restart reads at once",
+    "file": "src/app.js",
+    "from": "this.nextPollMono = this.monotonic() + Math.max(0, this.interval() - since);",
+    "to": "this.nextPollMono = this.monotonic();"
+  },
+  {
+    "name": "app: future /data date trusted",
+    "file": "src/app.js",
+    "from": "data.lastPollAt > 0 && data.lastPollAt <= now",
+    "to": "data.lastPollAt > 0"
+  },
+  {
+    "name": "app: no gap between requests",
+    "file": "src/app.js",
+    "from": "let wait = this.requestMono === undefined ? 0 : this.requestMono + MIN_GAP - mono;",
+    "to": "let wait = 0;"
+  },
+  {
+    "name": "app: budget not counted",
+    "file": "src/app.js",
+    "from": "if (this.requestTimes.length >= BUDGET_REQUESTS) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "app: board failure not spaced",
+    "file": "src/app.js",
+    "from": "from + Math.min(BOARD_RETRY_MAX, this.interval() * 2 ** (state.failures - 1));",
+    "to": "0;"
+  },
+  {
+    "name": "app: 429 does not pause",
+    "file": "src/app.js",
+    "from": "        if (err instanceof TrelloError && err.code === 'rate_limited') {\n          this.startPause(err.retryAfter);",
+    "to": "        if (false) {\n          this.startPause(err.retryAfter);"
+  },
+  {
+    "name": "app: unconfirmed create reported as refused",
+    "file": "src/app.js",
+    "from": "        this.logger.warn(`Card creation sent without confirmation (${err.code})`);",
+    "to": "        throw err;"
+  },
+  {
+    "name": "app: move confirmed without checking the list",
+    "file": "src/app.js",
+    "from": "    if (moved.idList !== list.id) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "app: own move not recorded",
+    "file": "src/app.js",
+    "from": "    this.ownMoves.set(card.id, own);",
+    "to": ""
+  },
+  {
+    "name": "app: announced dues not saved",
+    "file": "src/app.js",
+    "from": "if (marked.length > 0 || pruned) await this.save();",
+    "to": ""
+  },
+  {
+    "name": "app: unreadable /data treated as empty",
+    "file": "src/app.js",
+    "from": "      if (result.status === 'unreadable') {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "app: getConfig not retried",
+    "file": "src/app.js",
+    "from": "        this.track(this.readConfig(gen));",
+    "to": ""
+  },
+  {
+    "name": "app: board invalid token does not recheck member",
+    "file": "src/app.js",
+    "from": "if ((err.code === 'unauthorized' && err.auth) || err.code === 'not_found') {",
+    "to": "if (err.code === 'not_found') {"
+  },
+  {
+    "name": "app: server clock ignored",
+    "file": "src/app.js",
+    "from": "        this.noteDate(answer.date);",
+    "to": ""
+  },
+  {
+    "name": "app: action deadline ignored",
+    "file": "src/app.js",
+    "from": "action ? Math.min(ACTION_HTTP_TIMEOUT, left() - SECOND) : undefined;",
+    "to": "action ? 10 * 3_600_000 : undefined;"
+  },
+  {
+    "name": "app: not ready reschedules at once",
+    "file": "src/app.js",
+    "from": "        this.nextPollMono = this.monotonic() + this.interval();\n        this.publishStatus();",
+    "to": "        this.publishStatus();"
+  }
+]

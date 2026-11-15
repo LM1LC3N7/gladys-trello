@@ -1,45 +1,119 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// The configuration form (manifest config_schema), normalized and checked, and
+// the 8-bit tag of refused credentials (the only trace of them in /data).
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
-export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
-};
+import { createHash } from 'node:crypto';
+import {
+  BOUNDS,
+  CONFIG_BOARDS,
+  CONFIG_KEY,
+  CONFIG_POLL,
+  CONFIG_SOON,
+  CONFIG_TOKEN,
+  CONFIG_TZ,
+  DEFAULT_TZ,
+  DEFAULTS,
+  MAX_BOARDS,
+  NAME_MAX,
+} from './constants.js';
+
+/** A Trello API key: 32 hexadecimal characters. */
+const KEY = /^[0-9a-f]{32}$/i;
+/** A Trello token: letters and digits only ("ATTA" + 64 hex today, 64 hex before). */
+const TOKEN = /^[A-Za-z0-9]{32,256}$/;
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f]/;
+
+function number(raw, key) {
+  const [min, max] = BOUNDS[key];
+  if (raw === '' || raw === null || raw === undefined) return DEFAULTS[key];
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw.trim()) : NaN;
+  if (!Number.isFinite(n)) return DEFAULTS[key];
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** An IANA time zone Node knows, else the default. */
+export function timeZoneOf(raw) {
+  const zone = typeof raw === 'string' ? raw.trim() : '';
+  if (!zone || zone.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(zone)) return DEFAULT_TZ;
+  try {
+    // Kept as typed once Node knows it (America/Montreal stays itself).
+    new Intl.DateTimeFormat('en', { timeZone: zone });
+    return zone;
+  } catch {
+    return DEFAULT_TZ;
+  }
+}
+
+/** "Home, Work" -> ['Home', 'Work'] (at most MAX_BOARDS, duplicates dropped, case ignored). */
+export function boardRefs(raw) {
+  if (typeof raw !== 'string') return { refs: [], tooMany: false };
+  const refs = [];
+  const seen = new Set();
+  let tooMany = false;
+  for (const part of raw.split(/[,\n;]/)) {
+    const ref = part.replace(/\s+/g, ' ').trim();
+    if (!ref || CONTROL.test(ref) || ref.length > NAME_MAX) continue;
+    const key = ref.toLowerCase();
+    if (seen.has(key)) continue;
+    if (refs.length >= MAX_BOARDS) {
+      tooMany = true;
+      break;
+    }
+    seen.add(key);
+    refs.push(ref);
+  }
+  return { refs, tooMany };
+}
 
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * `{ key, token, problem, refs, tooMany, pollMinutes, soonHours, timeZone }`. `problem`:
+ * 'missing' (key or token empty), 'bad_key', 'bad_token': nothing is sent.
  */
 export function normalizeConfig(raw = {}) {
+  const value = raw && typeof raw === 'object' ? raw : {};
+  const text = (v) => (typeof v === 'string' ? v.trim() : '');
+  const key = text(value[CONFIG_KEY]);
+  // A token pasted with its "token=" prefix (from the authorize page URL) still reads.
+  const token = text(value[CONFIG_TOKEN]).replace(/^token=/i, '');
+  const { refs, tooMany } = boardRefs(value[CONFIG_BOARDS]);
+  let problem;
+  if (!key || !token) problem = 'missing';
+  else if (!KEY.test(key)) problem = 'bad_key';
+  else if (!TOKEN.test(token)) problem = 'bad_token';
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    key: problem ? '' : key,
+    token: problem ? '' : token,
+    problem,
+    refs,
+    tooMany,
+    pollMinutes: number(value[CONFIG_POLL], CONFIG_POLL),
+    soonHours: number(value[CONFIG_SOON], CONFIG_SOON),
+    timeZone: timeZoneOf(value[CONFIG_TZ]),
   };
+}
+
+/** The credentials as one string (memory only, never written). */
+export const credentialsOf = (config) => `${config.key}\u0000${config.token}`;
+
+/**
+ * 8 bits of a salted SHA-256 of refused credentials: enough to know after a
+ * restart that the same ones are still configured (1 chance in 256 of taking
+ * new ones for them, lifted by the test button), far too little to find them.
+ */
+export const tagOf = (salt, credentials) =>
+  createHash('sha256').update(`${salt}\u0000${credentials}`, 'utf8').digest()[0];
+
+/** A refusal read back from /data: `{ salt, tag, kind }`, or undefined. */
+export function validRefused(value) {
+  return value &&
+    typeof value === 'object' &&
+    typeof value.salt === 'string' &&
+    /^[0-9a-f]{32}$/.test(value.salt) &&
+    Number.isInteger(value.tag) &&
+    value.tag >= 0 &&
+    value.tag < 256
+    ? { salt: value.salt, tag: value.tag, kind: value.kind === 'key' ? 'key' : 'token' }
+    : undefined;
 }

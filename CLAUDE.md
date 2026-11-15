@@ -5,72 +5,58 @@ contributors.
 
 ## What this is
 
-A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
-no build step) that runs in its own sandboxed Docker container and talks to
-Gladys through
-[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
-its only runtime dependency. It started from the official JavaScript template.
+A Gladys Assistant **external integration** of type `provider` (Node.js 22+,
+ESM, no build step, sandboxed Docker container, `@gladysassistant/integration-sdk`
+0.16). It reads the Trello boards the user follows through the official REST
+API (`api.trello.com/1`, the API key of a Power-Up and a token) and gives the
+cards due and overdue to the dashboard (widget `cards`) and the scenes
+(triggers `card_due`, `card_moved`; actions `create_card`, `move_card`,
+`get_cards`). Unofficial, never tested with a real account.
 
 ## Commands
 
 ```bash
 npm install
-npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
-npm run lint                              # ESLint
-npm run format:check                      # Prettier, as the CI runs it
-npm run format                            # Prettier, fix in place
-npx github:GladysAssistant/integration-store .   # store admission checks
+npm test                                  # node --test (or gi test)
+npm run lint && npm run format:check
+memcap node scripts/mutants.mjs           # mutation check, one mutant at a time
+node scripts/cover.mjs cover.png          # regenerate the cover
 ```
-
-The CI (`.github/workflows/ci.yml`) runs `format:check`, `lint` and `test` on
-Node 22 and 24, and builds the Docker image: run the three commands before
-pushing.
 
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
-gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
-.github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
+index.js            SDK wiring only (src/handlers.js)
+src/app.js          App: lifecycle, config, /data, schedule, request slot and
+                    budget, refused credentials, pauses, board readings,
+                    triggers, scene actions, widget, status, test button
+src/trello.js       Trello answers read strictly, matching boards/lists/cards (pure)
+src/triggers.js     "card due" and "card moved" events (pure)
+src/widget.js       the widget content and the date formats (pure)
+src/config.js       the form normalized, the refused credentials' 8-bit tag
+src/http.js         the only network access (Authorization header, bounds, no redirect)
+src/store.js        /data state file (missing vs unreadable, atomic write, 0600)
+src/i18n.js         status, button, widget texts (en, fr)
+src/constants.js    manifest keys, bounds, rhythm
 ```
 
-## Rules
+## Module rules
 
-- **External ids are forever.** Build them with
-  `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
-  platform gives the device (serial, cloud id, MAC), never a label. Gladys keys
-  devices, their history, scenes and dashboards on them: changing one creates a
-  new device and orphans the old one. The same goes for every key users store:
-  manifest `config_schema`, `actions`, widget and scene keys, feature keys.
-- **The container rootfs is read-only.** Write only under `/data`, the one
-  writable volume. Never log tokens, passwords or API keys.
-- **Versions belong to the Release workflow** (Actions → Release). Never edit
-  `version` in `package.json` or in the manifest, nor the `docker_image` tag,
-  by hand — except on the README's hand-pushed tag path, which bumps all three
-  together before tagging. `test/manifest.test.js` checks they agree.
-- **Changelog.** Every user-visible change adds a line under `## [Unreleased]`
-  in `CHANGELOG.md` (`### Added`, `Changed`, `Fixed`, `Removed`, `Security`).
-  Never write a version heading: the Release workflow moves the section, and it
-  becomes the notes of the GitHub Release.
-- **Manifest.** Texts are multi-language objects `{ "en": ..., "fr": ... }`:
-  `label`, `description` and `placeholder` alike, never a plain string. The
-  catalog `description` holds 10 to 100 characters per language. A field the
-  older cores do not know needs a higher `gladys_version` minimum
-  (`categories`: 4.86.0; `widgets`, `scene_triggers`, `scene_actions`,
-  `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
-  code (defaults, action, scene and widget handlers): change both sides
-  together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
-- **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
-  in English. Tests never touch the network.
+- **Credentials**: the key and the token only in the `Authorization: OAuth
+oauth_consumer_key="…", oauth_token="…"` header, never in a URL, a log, a
+  status, /data or an error. A refusal is a 401 on `/members/me` whose text
+  names the key or the token; a 401 elsewhere never is.
+- **Never more than the interval**: one reading per `poll_minutes`; a restart
+  waits the rest of it (`lastPollAt` in /data before the reading), a
+  reconnection keeps the schedule.
+- **Polite**: one request in flight, 300 ms gap, 30 per 10 s; 429 (and 5xx on
+  the member) pause every request, kept in /data; a failing board is spaced
+  alone.
+- **Writes never retried**: a create or move without answer is `unconfirmed`,
+  the board read back; `moved` only when the answer shows the new list.
+- **No scene loop**: a move made through Gladys is in `ownMoves` before it leaves.
+- **Keys are forever**: config, action, widget, trigger, field, variable and
+  output keys are stored in user scenes and dashboards.
+- Bilingual texts (en/fr), CHANGELOG `[Unreleased]`, versions by the Release
+  workflow only. Tests never touch the network (`fetchImpl` injected); the
+  widget content passes the SDK's `validateWidgetContent`.

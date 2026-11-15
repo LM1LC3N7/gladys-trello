@@ -1,177 +1,548 @@
 {
   "manifest_version": 1,
-  "type": "device",
-  "name": "Demo Devices Template",
+  "type": "provider",
+  "name": "Trello",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: Trello cards due and overdue, cards created and moved from your scenes.",
+    "fr": "Non officiel : cartes Trello à échéance et en retard, créées et déplacées par vos scènes."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-trello:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-trello/main/cover.png",
+  "categories": ["services"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Trello boards",
+        "fr": "Tableaux Trello"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial integration, not affiliated with Atlassian (the makers of Trello). It reads your Trello boards through the official REST API (api.trello.com) with the API key of a Power-Up you create and a token you generate for it: open the Power-Ups admin page, create a Power-Up (any name, for example Gladys), generate its API key, then click the \"Token\" link next to the key and allow the access (read and write). You get the cards due and overdue on the dashboard, the scene triggers \"card due\" and \"card moved\", and the scene actions create a card, move a card and read the cards due. The boards are read every 5 minutes by default: a few requests, far below the 100 requests per 10 seconds Trello allows per token.",
+        "fr": "Intégration non officielle, sans lien avec Atlassian (l’éditeur de Trello). Elle lit vos tableaux Trello par l’API REST officielle (api.trello.com) avec la clé d’API d’un Power-Up que vous créez et un jeton que vous générez pour lui : ouvrez la page d’administration des Power-Ups, créez un Power-Up (nom libre, par exemple Gladys), générez sa clé d’API, puis cliquez sur le lien « Jeton » à côté de la clé et autorisez l’accès (lecture et écriture). Vous obtenez les cartes à échéance et en retard sur le tableau de bord, les déclencheurs de scène « carte à échéance » et « carte déplacée », et les actions de scène créer une carte, déplacer une carte et lire les cartes à échéance. Les tableaux sont lus toutes les 5 minutes par défaut : quelques requêtes, très en dessous des 100 requêtes par 10 secondes que Trello permet par jeton."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://trello.com/power-ups/admin",
+          "label": {
+            "en": "Trello Power-Ups admin (API key and token)",
+            "fr": "Administration des Power-Ups Trello (clé d’API et jeton)"
+          }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-trello/blob/main/docs/fr.md",
+          "label": {
+            "en": "Guide (French)",
+            "fr": "Guide (français)"
+          }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-trello/blob/main/docs/en.md",
+          "label": {
+            "en": "Guide (English)",
+            "fr": "Guide (anglais)"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "api_key",
+      "type": "secret",
+      "label": {
+        "en": "API key of the Power-Up",
+        "fr": "Clé d’API du Power-Up"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "32 characters, on the \"API key\" page of your Power-Up. Kept by Gladys in its database, never shown again, sent only to Trello.",
+        "fr": "32 caractères, sur la page « Clé d’API » de votre Power-Up. Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement à Trello."
+      },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "api_token",
+      "type": "secret",
+      "label": {
+        "en": "Token",
+        "fr": "Jeton"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "Generated through the \"Token\" link next to the API key (read and write access). Kept by Gladys in its database, never shown again, sent only to Trello.",
+        "fr": "Généré par le lien « Jeton » à côté de la clé d’API (accès en lecture et écriture). Gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à Trello."
+      },
+      "required": true
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "boards",
+      "type": "string",
+      "label": {
+        "en": "Boards followed (empty: every open board, 10 at most)",
+        "fr": "Tableaux suivis (vide : tous les tableaux ouverts, 10 au plus)"
+      },
+      "description": {
+        "en": "Board names as in Trello, or their links, separated by commas. 10 boards at most.",
+        "fr": "Noms des tableaux comme dans Trello, ou leurs liens, séparés par des virgules. 10 tableaux au plus."
+      },
+      "placeholder": {
+        "en": "Home, Work",
+        "fr": "Maison, Travail"
+      },
+      "required": false
+    },
+    {
+      "key": "poll_minutes",
+      "type": "number",
+      "label": {
+        "en": "Reading interval (minutes)",
+        "fr": "Intervalle de lecture (minutes)"
+      },
+      "description": {
+        "en": "How often the boards are read (one request per board). A change made through Gladys is applied at once.",
+        "fr": "Fréquence de lecture des tableaux (une requête par tableau). Une modification faite depuis Gladys est prise en compte aussitôt."
+      },
       "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
+      "default": 5,
+      "min": 2,
+      "max": 60
     },
     {
-      "key": "poll_frequency",
+      "key": "soon_hours",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "label": {
+        "en": "\"Due soon\": within how many hours",
+        "fr": "« Bientôt dues » : dans combien d’heures"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "A card whose due date comes within this many hours is \"due soon\" (widget and scene action).",
+        "fr": "Une carte dont l’échéance arrive dans ce nombre d’heures est « bientôt due » (widget et action de scène)."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 24,
+      "min": 1,
+      "max": 168
+    },
+    {
+      "key": "time_zone",
+      "type": "string",
+      "label": {
+        "en": "Time zone of the dates shown",
+        "fr": "Fuseau horaire des dates affichées"
+      },
+      "description": {
+        "en": "IANA name, for example Europe/Paris (the default) or America/Montreal. Used for the dates in the widget and the scene texts.",
+        "fr": "Nom IANA, par exemple Europe/Paris (par défaut) ou America/Montreal. Sert aux dates du widget et des textes de scène."
+      },
+      "placeholder": {
+        "en": "Europe/Paris",
+        "fr": "Europe/Paris"
+      },
+      "required": false
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
+      "key": "test_connection",
+      "timeout_seconds": 30,
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
+      },
+      "description": {
+        "en": "Reads your Trello account and shows its open boards, the boards followed and the number of cards overdue and due soon.",
+        "fr": "Lit votre compte Trello et affiche ses tableaux ouverts, les tableaux suivis et le nombre de cartes en retard et bientôt dues."
+      }
+    }
+  ],
+  "widgets": [
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
+      "key": "cards",
+      "label": {
+        "en": "Trello cards due",
+        "fr": "Cartes Trello à échéance"
+      },
+      "description": {
+        "en": "The cards overdue and due soon of the boards followed, each opening its Trello card.",
+        "fr": "Les cartes en retard et bientôt dues des tableaux suivis, chacune ouvrant sa carte Trello."
+      },
+      "icon": "columns",
+      "settings": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "key": "board",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Only this board (empty: every board followed)",
+            "fr": "Seulement ce tableau (vide : tous les tableaux suivis)"
+          },
+          "placeholder": {
+            "en": "Home",
+            "fr": "Maison"
+          }
         }
       ]
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "card_due",
+      "label": {
+        "en": "Trello card due",
+        "fr": "Carte Trello à échéance"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "A card of a followed board reached its due date and is not marked complete. Checked every minute; a due already past when the card is first read (after a restart, a board unread for a while) does not fire.",
+        "fr": "Une carte d’un tableau suivi a atteint son échéance et n’est pas marquée terminée. Vérifié chaque minute ; une échéance déjà passée quand la carte est lue pour la première fois (après un redémarrage, un tableau longtemps non lu) ne déclenche rien."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "key": "board",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Board name, exactly as in Trello (empty: any)",
+            "fr": "Nom du tableau, exactement comme dans Trello (vide : tous)"
+          }
         },
         {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "key": "list",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "List name, exactly as in Trello (empty: any)",
+            "fr": "Nom de la liste, exactement comme dans Trello (vide : toutes)"
+          }
         }
       ],
       "variables": [
+        { "key": "name", "type": "string", "label": { "en": "Card", "fr": "Carte" } },
+        { "key": "board", "type": "string", "label": { "en": "Board", "fr": "Tableau" } },
+        { "key": "list", "type": "string", "label": { "en": "List", "fr": "Liste" } },
         {
-          "key": "target",
+          "key": "due",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": { "en": "Due date (ISO 8601, UTC)", "fr": "Échéance (ISO 8601, UTC)" }
+        },
+        {
+          "key": "due_local",
+          "type": "string",
+          "label": {
+            "en": "Due date (configured time zone)",
+            "fr": "Échéance (fuseau configuré)"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": { "en": "Link to the card", "fr": "Lien vers la carte" }
+        },
+        {
+          "key": "labels",
+          "type": "string",
+          "label": {
+            "en": "Labels, separated by commas",
+            "fr": "Étiquettes, séparées par des virgules"
+          }
+        }
+      ]
+    },
+    {
+      "key": "card_moved",
+      "label": {
+        "en": "Trello card moved",
+        "fr": "Carte Trello déplacée"
+      },
+      "description": {
+        "en": "A card of a followed board went to another list, seen at the next reading (every 5 minutes by default). The moves made through Gladys do not fire it.",
+        "fr": "Une carte d’un tableau suivi est passée dans une autre liste, vu à la lecture suivante (toutes les 5 minutes par défaut). Les déplacements faits depuis Gladys ne le déclenchent pas."
+      },
+      "fields": [
+        {
+          "key": "board",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Board name, exactly as in Trello (empty: any)",
+            "fr": "Nom du tableau, exactement comme dans Trello (vide : tous)"
+          }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "List it went to, exactly as in Trello (empty: any)",
+            "fr": "Liste d’arrivée, exactement comme dans Trello (vide : toutes)"
+          }
+        }
+      ],
+      "variables": [
+        { "key": "name", "type": "string", "label": { "en": "Card", "fr": "Carte" } },
+        { "key": "board", "type": "string", "label": { "en": "Board", "fr": "Tableau" } },
+        {
+          "key": "list",
+          "type": "string",
+          "label": { "en": "List it went to", "fr": "Liste d’arrivée" }
+        },
+        {
+          "key": "from_list",
+          "type": "string",
+          "label": { "en": "List it left", "fr": "Liste de départ" }
+        },
+        {
+          "key": "due",
+          "type": "string",
+          "label": { "en": "Due date (ISO 8601, UTC)", "fr": "Échéance (ISO 8601, UTC)" }
+        },
+        {
+          "key": "due_local",
+          "type": "string",
+          "label": {
+            "en": "Due date (configured time zone)",
+            "fr": "Échéance (fuseau configuré)"
+          }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": { "en": "Link to the card", "fr": "Lien vers la carte" }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "create_card",
+      "label": {
+        "en": "Create a Trello card",
+        "fr": "Créer une carte Trello"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Adds a card to a list. Never sent twice: when Trello does not answer, \"Created\" is false and the result says \"unconfirmed\" (check in Trello before running it again).",
+        "fr": "Ajoute une carte à une liste. Jamais envoyée deux fois : si Trello ne répond pas, « Créée » est faux et le résultat dit « unconfirmed » (vérifiez dans Trello avant de relancer)."
+      },
+      "timeout_seconds": 30,
       "fields": [
         {
-          "key": "device",
+          "key": "board",
+          "type": "string",
+          "required": true,
+          "label": { "en": "Board (name or link)", "fr": "Tableau (nom ou lien)" },
+          "placeholder": { "en": "Home", "fr": "Maison" }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "required": true,
+          "label": { "en": "List", "fr": "Liste" },
+          "placeholder": { "en": "To do", "fr": "À faire" }
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "required": true,
+          "label": { "en": "Card name", "fr": "Nom de la carte" },
+          "placeholder": { "en": "Replace the filter", "fr": "Changer le filtre" }
+        },
+        {
+          "key": "description",
+          "type": "string",
+          "required": false,
+          "label": { "en": "Description (optional)", "fr": "Description (facultative)" }
+        },
+        {
+          "key": "due_in_minutes",
+          "type": "number",
+          "required": false,
+          "min": 0,
+          "max": 525600,
+          "label": {
+            "en": "Due in (minutes, 0 or empty: no due date)",
+            "fr": "Échéance dans (minutes, 0 ou vide : sans échéance)"
+          }
+        },
+        {
+          "key": "position",
           "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "required": false,
+          "default": "bottom",
+          "label": { "en": "Position in the list", "fr": "Position dans la liste" },
+          "options": [
+            { "value": "top", "label": { "en": "Top", "fr": "En haut" } },
+            { "value": "bottom", "label": { "en": "Bottom", "fr": "En bas" } }
+          ]
+        }
+      ],
+      "outputs": [
+        { "key": "created", "type": "boolean", "label": { "en": "Created", "fr": "Créée" } },
+        {
+          "key": "result",
+          "type": "string",
+          "label": {
+            "en": "Result (created, unconfirmed)",
+            "fr": "Résultat (created, unconfirmed)"
+          }
+        },
+        {
+          "key": "id",
+          "type": "string",
+          "label": { "en": "Card id", "fr": "Identifiant de la carte" }
+        },
+        {
+          "key": "url",
+          "type": "string",
+          "label": { "en": "Link to the card", "fr": "Lien vers la carte" }
+        },
+        { "key": "name", "type": "string", "label": { "en": "Card", "fr": "Carte" } },
+        { "key": "board", "type": "string", "label": { "en": "Board", "fr": "Tableau" } },
+        { "key": "list", "type": "string", "label": { "en": "List", "fr": "Liste" } }
+      ]
+    },
+    {
+      "key": "move_card",
+      "label": {
+        "en": "Move a Trello card",
+        "fr": "Déplacer une carte Trello"
+      },
+      "description": {
+        "en": "Moves a card to another list of its board. The card is found by its link, else by its name (case and accents ignored, else the only card containing it). \"Moved\" is true only when Trello answers with the card in the new list.",
+        "fr": "Déplace une carte vers une autre liste de son tableau. La carte est trouvée par son lien, sinon par son nom (casse et accents ignorés, sinon la seule carte qui le contient). « Déplacée » n’est vrai que si Trello répond avec la carte dans la nouvelle liste."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "board",
+          "type": "string",
+          "required": true,
+          "label": { "en": "Board (name or link)", "fr": "Tableau (nom ou lien)" },
+          "placeholder": { "en": "Home", "fr": "Maison" }
+        },
+        {
+          "key": "card",
+          "type": "string",
+          "required": true,
+          "label": { "en": "Card (name or link)", "fr": "Carte (nom ou lien)" },
+          "placeholder": { "en": "Replace the filter", "fr": "Changer le filtre" }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "required": true,
+          "label": { "en": "Move to list", "fr": "Vers la liste" },
+          "placeholder": { "en": "Done", "fr": "Terminé" }
+        },
+        {
+          "key": "position",
+          "type": "select",
+          "required": false,
+          "default": "top",
+          "label": { "en": "Position in the list", "fr": "Position dans la liste" },
+          "options": [
+            { "value": "top", "label": { "en": "Top", "fr": "En haut" } },
+            { "value": "bottom", "label": { "en": "Bottom", "fr": "En bas" } }
+          ]
+        }
+      ],
+      "outputs": [
+        { "key": "moved", "type": "boolean", "label": { "en": "Moved", "fr": "Déplacée" } },
+        {
+          "key": "result",
+          "type": "string",
+          "label": {
+            "en": "Result (moved, already, not_applied, unconfirmed)",
+            "fr": "Résultat (moved, already, not_applied, unconfirmed)"
+          }
+        },
+        { "key": "name", "type": "string", "label": { "en": "Card", "fr": "Carte" } },
+        {
+          "key": "from_list",
+          "type": "string",
+          "label": { "en": "List it left", "fr": "Liste de départ" }
+        },
+        { "key": "list", "type": "string", "label": { "en": "List", "fr": "Liste" } },
+        {
+          "key": "url",
+          "type": "string",
+          "label": { "en": "Link to the card", "fr": "Lien vers la carte" }
+        }
+      ]
+    },
+    {
+      "key": "get_cards",
+      "label": {
+        "en": "Read the Trello cards due",
+        "fr": "Lire les cartes Trello à échéance"
+      },
+      "description": {
+        "en": "The cards overdue and due soon of the boards followed, from the last reading (no request), for a message or a condition that follows.",
+        "fr": "Les cartes en retard et bientôt dues des tableaux suivis, d’après la dernière lecture (aucune requête), pour un message ou une condition qui suit."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "board",
+          "type": "string",
+          "required": false,
+          "label": { "en": "Only this board (optional)", "fr": "Seulement ce tableau (facultatif)" }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "required": false,
+          "label": {
+            "en": "Only this list of the board (optional)",
+            "fr": "Seulement cette liste du tableau (facultatif)"
+          }
+        },
+        {
+          "key": "only",
+          "type": "select",
+          "required": false,
+          "default": "due",
+          "label": { "en": "Cards", "fr": "Cartes" },
+          "options": [
+            {
+              "value": "due",
+              "label": { "en": "Overdue and due soon", "fr": "En retard et bientôt dues" }
+            },
+            { "value": "overdue", "label": { "en": "Overdue only", "fr": "En retard seulement" } },
+            { "value": "soon", "label": { "en": "Due soon only", "fr": "Bientôt dues seulement" } }
+          ]
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "count",
+          "type": "number",
+          "label": { "en": "Number of cards", "fr": "Nombre de cartes" }
+        },
+        {
+          "key": "overdue_count",
+          "type": "number",
+          "label": { "en": "Overdue cards", "fr": "Cartes en retard" }
+        },
+        {
+          "key": "soon_count",
+          "type": "number",
+          "label": { "en": "Cards due soon", "fr": "Cartes bientôt dues" }
+        },
+        {
+          "key": "list",
+          "type": "string",
+          "label": { "en": "The cards, one per line", "fr": "Les cartes, une par ligne" }
+        },
+        {
+          "key": "next_name",
+          "type": "string",
+          "label": { "en": "First card", "fr": "Première carte" }
+        },
+        {
+          "key": "next_due",
+          "type": "string",
+          "label": { "en": "Its due date", "fr": "Son échéance" }
         }
       ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
     }
   ]
 }
