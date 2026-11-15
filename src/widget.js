@@ -6,8 +6,10 @@
 
 import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
 import { WIDGET_ITEMS } from './constants.js';
+
+const SUBTITLE_MAX = 60;
 import { T } from './i18n.js';
-import { isOverdue, isSoon } from './trello.js';
+import { cutText, isOverdue, isSoon } from './trello.js';
 
 const pick = (text, language) => (language === 'fr' ? text.fr : text.en);
 
@@ -65,6 +67,18 @@ export function dueCards(boards, now, soonMs, { list } = {}) {
   );
 }
 
+const chars = cutText;
+
+/** "Board · List" in the 60 characters the core keeps: the board shortened first. */
+export function subtitleOf(board, list) {
+  const sep = ' · ';
+  const whole = `${board}${sep}${list}`;
+  if (whole.length <= SUBTITLE_MAX) return whole;
+  const listPart = chars(list, SUBTITLE_MAX - sep.length - 8);
+  const room = SUBTITLE_MAX - sep.length - listPart.length;
+  return `${chars(board, room)}${sep}${listPart}`;
+}
+
 /** A widget showing only a text (not configured, not read yet). */
 export const messageWidget = (text, language) => ({
   ttl_seconds: 60,
@@ -105,8 +119,8 @@ export function cardsWidget({ boards, now, soonHours, timeZone, language }) {
     items: items.slice(0, WIDGET_ITEMS).map(({ board, card, overdue: late }) => {
       const list = board.lists.get(card.idList) ?? '';
       const item = {
-        title: card.name.slice(0, 60),
-        subtitle: `${board.name} · ${list}`.slice(0, 120),
+        title: chars(card.name, 60),
+        subtitle: subtitleOf(board.name, list),
         badge: {
           text: late
             ? pick(T.widgetOverdue, language).slice(0, 16)

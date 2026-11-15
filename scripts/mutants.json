@@ -86,8 +86,8 @@
   {
     "name": "app: refusal on any member 401",
     "file": "src/app.js",
-    "from": "if (err instanceof TrelloError && err.code === 'unauthorized' && err.auth) {\n        await this.refuse(err.auth);",
-    "to": "if (err instanceof TrelloError && err.code === 'unauthorized') {\n        await this.refuse(err.auth ?? 'token');"
+    "from": "      if (err instanceof TrelloError && err.code === 'unauthorized' && err.auth) {\n        await this.refuse(err.auth, err.creds);",
+    "to": "      if (err instanceof TrelloError && err.code === 'unauthorized') {\n        await this.refuse(err.auth ?? 'token', err.creds);"
   },
   {
     "name": "app: refused credentials asked again",
@@ -208,5 +208,89 @@
     "file": "src/app.js",
     "from": "        this.nextPollMono = this.monotonic() + this.interval();\n        this.publishStatus();",
     "to": "        this.publishStatus();"
+  },
+  {
+    "name": "app: refusal of replaced credentials",
+    "file": "src/app.js",
+    "from": "    if (!this.config || creds !== credentialsOf(this.config)) return;\n",
+    "to": ""
+  },
+  {
+    "name": "app: member answer of replaced credentials kept",
+    "file": "src/app.js",
+    "from": "      if (creds !== credentialsOf(this.config)) throw this.outdated();\n      this.member",
+    "to": "      this.member"
+  },
+  {
+    "name": "app: member error of replaced credentials decides",
+    "file": "src/app.js",
+    "from": "      if (err instanceof TrelloError && err.creds !== credentialsOf(this.config)) {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "app: readings kept after a refusal",
+    "file": "src/app.js",
+    "from": "    this.boards.clear();\n    this.logger.warn(`Trello refused",
+    "to": "    this.logger.warn(`Trello refused"
+  },
+  {
+    "name": "app: due decided on old readings",
+    "file": "src/app.js",
+    "from": "      this.readBoards(this.triggerAge()),",
+    "to": "      this.readBoards(Infinity),"
+  },
+  {
+    "name": "app: widget shows old readings",
+    "file": "src/app.js",
+    "from": "    return Boolean(state?.snap) && this.monotonic() - state.readMono <= maxAge;",
+    "to": "    return Boolean(state?.snap);"
+  },
+  {
+    "name": "app: moves compared with an old reading",
+    "file": "src/app.js",
+    "from": "const previous = this.isFresh(state) ? state.snap : undefined;",
+    "to": "const previous = state.snap;"
+  },
+  {
+    "name": "app: request not aborted by stop",
+    "file": "src/app.js",
+    "from": "      controller.abort(new DOMException('Integration stopping', 'AbortError'));",
+    "to": ""
+  },
+  {
+    "name": "app: stop save not bounded",
+    "file": "src/app.js",
+    "from": "    if (this.loaded) await this.save(STOP_BUDGET / 2);",
+    "to": "    if (this.loaded) await this.save();"
+  },
+  {
+    "name": "app: recheck timer after stop",
+    "file": "src/app.js",
+    "from": "if (this.recheckTimer || gen !== this.generation || !this.running) return;",
+    "to": "if (this.recheckTimer) return;"
+  },
+  {
+    "name": "app: own move never consumed",
+    "file": "src/app.js",
+    "from": "        if (snap.cards.get(cardId)?.idList === own.list) this.ownMoves.delete(cardId);",
+    "to": ""
+  },
+  {
+    "name": "widget: subtitle not shortened",
+    "file": "src/widget.js",
+    "from": "  if (whole.length <= SUBTITLE_MAX) return whole;",
+    "to": "  return whole;"
+  },
+  {
+    "name": "trello: cut by UTF-16 unit",
+    "file": "src/trello.js",
+    "from": "    if (out.length + ch.length > max - 1) break;",
+    "to": "    if (out.length + 1 > max - 1) break;"
+  },
+  {
+    "name": "config: unknown zone not flagged",
+    "file": "src/config.js",
+    "from": "text(value[CONFIG_TZ]) !== '' && timeZoneOf",
+    "to": "false && timeZoneOf"
   }
 ]

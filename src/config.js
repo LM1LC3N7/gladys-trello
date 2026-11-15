@@ -91,6 +91,9 @@ export function normalizeConfig(raw = {}) {
     pollMinutes: number(value[CONFIG_POLL], CONFIG_POLL),
     soonHours: number(value[CONFIG_SOON], CONFIG_SOON),
     timeZone: timeZoneOf(value[CONFIG_TZ]),
+    /** A zone typed but not known: said in the status (the default is used). */
+    badZone:
+      text(value[CONFIG_TZ]) !== '' && timeZoneOf(value[CONFIG_TZ]) !== text(value[CONFIG_TZ]),
   };
 }
 

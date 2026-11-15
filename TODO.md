@@ -2,8 +2,8 @@
 
 ## Before announcing
 
-- [ ] Review r1 (high: cloud API with a key and a token, writes cards, no
-      physical action).
+- [x] Review r1 (high): I1-I4 and M1-M6 fixed; M7 documented (see Decisions).
+- [ ] Review r2.
 - [ ] Turn on "Private vulnerability reporting" (SECURITY.md points there).
 - [ ] Add the `gladys-assistant-integration` topic at publication only.
 - [ ] Store field not set in the manifest: `keywords` (Trello, kanban, cartes,
@@ -29,6 +29,23 @@
       module stays at 30 per 10 s and about (1 + boards) requests per reading.
 
 ## Decisions
+
+- Review r1, M7: the "card moved" events beyond 20 in one reading are not sent
+  (the next reading compares with the new list); said in the docs. Keeping them
+  for later would need a queue of past moves, not worth it for v1.
+- Review r1, equivalent mutants (not killed): `isOverdue` `<=` vs `<` (equality
+  never reached with a moving clock), the badge cut at 16 (11 characters at
+  most), and the pair "stop does not release the waiters" / "a waiter given
+  without the generation check": each alone is covered by the other and by the
+  abort of the request in flight.
+- Freshness: "card due" decides on readings at most 2 intervals + 1 min old;
+  the widget, "Read the Trello cards due" and the status on readings at most
+  max(3 intervals, 30 min) old, then say the data is out of date. A refusal
+  drops every reading.
+- An answer to credentials replaced while it was in flight decides nothing
+  (each request carries the credentials it used).
+- `stop()` returns within 3 s: the request in flight aborted, the jobs and the
+  last save bounded to 1.5 s each.
 
 - Version 0.1.0 set by hand (package.json, lock, manifest, docker_image).
 - `type: provider` (no device), `gladys_version: ">=5.1.0"` (widgets and scene

@@ -51,6 +51,8 @@ export function testClock({ start = Date.UTC(2026, 0, 1), step = 0.001 } = {}) {
     get pending() {
       return pending.size;
     },
+    /** The callbacks still pending (debugging a timer left behind). */
+    pendingSources: () => [...pending.values()].map((p) => String(p.fn).slice(0, 160)),
     timers: {
       setTimeout: (fn, ms, ...args) => add(fn, ms, args, false),
       setInterval: (fn, ms, ...args) => add(fn, ms, args, true),

@@ -47,7 +47,8 @@ can revoke it at any time in your Trello account settings (Applications).
   soon".
 - **Time zone of the dates shown**: `Europe/Paris` by default. Trello gives
   instants; this zone only serves to write the dates of the widget and of the
-  scene texts.
+  scene texts. A name Node does not know is replaced by the default, and the
+  status says so.
 
 The **Test the connection** button reads your account and shows your open
 boards, the boards followed and the number of cards overdue and due soon.
@@ -75,7 +76,8 @@ requests every 5 minutes.
 Widget **Trello cards due**: two tiles (overdue, due soon) and up to 8 cards,
 overdue first, then by due date, with their board and list; each opens its Trello
 card. Optional setting: one board only. The widget reads the last reading (no
-request); it is refreshed when what it shows changes.
+request; older than 3 intervals, 30 min at least, it shows "Trello data out of
+date" with the age of the last reading); it is refreshed when what it shows changes.
 
 An "overdue" card has a due date in the past and is not marked complete in
 Trello (the due date checkbox), whatever its list.
@@ -83,7 +85,9 @@ Trello (the due date checkbox), whatever its list.
 ## Scene triggers
 
 - **Trello card due**: a card of a followed board reaches its due date and is not
-  marked complete. Checked every minute, without a request, on the last reading.
+  marked complete. Checked every minute, without a request, on the last reading
+  when it is at most two intervals and a minute old (a board failing longer, or
+  credentials refused, fires nothing).
   Once per card and due date (a due date moved later fires again at the new
   date). A due date already past by more than an interval and a minute when the
   card is first read (first start, a board unread for a while, a card created
@@ -91,7 +95,10 @@ Trello (the due date checkbox), whatever its list.
   (3 days): a restart does not send them again.
 - **Trello card moved**: a card of a followed board went to another list between
   two readings. The first reading fires nothing; the moves made by the "Move a
-  Trello card" action do not fire it (no scene loop).
+  Trello card" action do not fire it (no scene loop); once a reading shows the
+  card in that list, a later real move there fires again. A reading older than
+  3 intervals (30 min at least) is not compared: the moves of a long failure do
+  not fire.
 
 Filters: the **board name** and the **list name**, exactly as in Trello (Gladys
 compares the texts as they are; empty: any).
@@ -99,7 +106,8 @@ compares the texts as they are; empty: any).
 Variables: card (`name`), board, list, due date (`due`, ISO 8601 in UTC, and
 `due_local`, for example `2026-11-15 18:00` in the configured zone), link to the
 card, labels (due) or the list it left (moved). At most 20 events of each kind
-per reading or per minute.
+per reading or per minute: the dues beyond wait for the next minute, the moves
+beyond 20 in one reading are not sent.
 
 ## Scene actions
 
@@ -118,7 +126,9 @@ per reading or per minute.
   `unconfirmed` when Trello did not answer), `name`, `from_list`, `list`, `url`.
   `moved` is true only when Trello's answer shows the card in the new list.
 - **Read the Trello cards due**: the cards overdue and due soon (or one of the
-  two), of a board or a list if you like, from the last reading (no request).
+  two), of a board or a list if you like, from the last reading (no request;
+  older than 3 intervals, 30 min at least, the action fails and says the data
+  is out of date).
   Outputs: `count`, `overdue_count`, `soon_count`, `list` (one card per line with
   board, list and due date), `next_name`, `next_due`.
 

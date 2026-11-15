@@ -69,6 +69,8 @@ import {
   SECOND,
   SKEW_MAX,
   SKEW_MIN,
+  STALE_MIN,
+  STOP_BUDGET,
   STORE_RETRY,
   TEST_FRESH,
   TEST_GAP,
@@ -77,7 +79,15 @@ import {
 import { credentialsOf, normalizeConfig, tagOf, validRefused } from './config.js';
 import { TrelloError, request } from './http.js';
 import { T, reason } from './i18n.js';
-import { findBoard, findCard, findList, parseBoard, parseCard, parseMember } from './trello.js';
+import {
+  cutText,
+  findBoard,
+  findCard,
+  findList,
+  parseBoard,
+  parseCard,
+  parseMember,
+} from './trello.js';
 import { dueEvents, moveEvents } from './triggers.js';
 import { cardsWidget, dueCards, formatDue, messageWidget } from './widget.js';
 
@@ -86,7 +96,7 @@ const ANNOUNCED = /^[0-9a-f]{24}\|\d{1,15}$/;
 const ID = /^[0-9a-f]{24}$/;
 const STATUS_MAX = 480;
 
-const cut = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+const cut = cutText;
 // eslint-disable-next-line no-control-regex
 const descOf = (value) => String(value ?? '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ');
 
@@ -164,6 +174,8 @@ export class App {
     this.saving = undefined;
     this.dataError = undefined;
     this.jobs = new Set();
+    /** The AbortController of the request in flight (aborted by stop). */
+    this.controllers = new Set();
   }
 
   // --- Lifecycle -------------------------------------------------------------------
@@ -185,14 +197,33 @@ export class App {
     await this.readConfig(gen);
   }
 
+  /**
+   * Stops everything within STOP_BUDGET (SIGTERM gives 10 s): the request in
+   * flight aborted (a write in flight is then "unconfirmed"), the jobs given
+   * half the budget, the last save the other half.
+   */
   async stop() {
     this.running = false;
     this.generation += 1;
     this.clearTimers();
     for (const wake of [...this.sleeps]) wake();
     for (const waiter of this.waiters.splice(0)) waiter(false);
-    await Promise.allSettled([...this.jobs]);
-    if (this.loaded) await this.save();
+    for (const controller of this.controllers) {
+      controller.abort(new DOMException('Integration stopping', 'AbortError'));
+    }
+    await this.within(Promise.allSettled([...this.jobs]), STOP_BUDGET / 2);
+    if (this.loaded) await this.save(STOP_BUDGET / 2);
+  }
+
+  /** Waits for `promise` at most `ms` on the injected timers (never throws). */
+  within(promise, ms) {
+    let timer;
+    return Promise.race([
+      Promise.resolve(promise).catch(() => {}),
+      new Promise((resolve) => {
+        timer = this.timers.setTimeout(resolve, ms);
+      }),
+    ]).finally(() => this.timers.clearTimeout(timer));
   }
 
   clearTimers() {
@@ -332,11 +363,14 @@ export class App {
     return tagOf(this.refused.salt, creds) === this.refused.tag;
   }
 
-  async refuse(kind) {
+  /** `creds`: those the refused request carried (never the ones saved since). */
+  async refuse(kind, creds) {
+    if (!this.config || creds !== credentialsOf(this.config)) return;
     const salt = this.random(16).toString('hex');
-    const creds = credentialsOf(this.config);
     this.refused = { salt, tag: tagOf(salt, creds), kind };
     this.refusedCreds = creds;
+    // Nothing read with refused credentials is used any more (no stale event).
+    this.boards.clear();
     this.logger.warn(`Trello refused the ${kind}: nothing asked until it changes`);
     await this.save();
     this.publishStatus();
@@ -446,15 +480,9 @@ export class App {
    * One write at a time, bounded in time: a write that hangs counts as a
    * failed one (the data stays in memory). Never throws. True when written.
    */
-  async save() {
+  async save(budget = SAVE_TIMEOUT) {
     if (this.saving) {
-      await Promise.race([
-        this.saving,
-        new Promise((r) => {
-          const t = this.timers.setTimeout(r, SAVE_TIMEOUT);
-          this.saving?.then(() => this.timers.clearTimeout(t));
-        }),
-      ]);
+      await this.within(this.saving, budget);
       if (this.saving) {
         this.dataError = 'timeout';
         return false;
@@ -471,7 +499,7 @@ export class App {
       if (this.saving === done) this.saving = undefined;
     });
     const late = new Promise((resolve) => {
-      timer = this.timers.setTimeout(() => resolve('timeout'), SAVE_TIMEOUT);
+      timer = this.timers.setTimeout(() => resolve('timeout'), budget);
     });
     try {
       const result = await Promise.race([job.then(() => 'ok'), late]);
@@ -582,6 +610,9 @@ export class App {
       this.requestTimes.push(this.requestMono);
       // The whole exchange bounded on the injected timers (the body included).
       const controller = new AbortController();
+      this.controllers.add(controller);
+      // The credentials this request carries: its answer only ever speaks of them.
+      const used = credentialsOf(this.config);
       const timer = this.timers.setTimeout(
         () => controller.abort(new DOMException('Trello did not answer in time', 'TimeoutError')),
         timeout ?? HTTP_TIMEOUT,
@@ -598,8 +629,9 @@ export class App {
           now: this.now,
         });
         this.noteDate(answer.date);
-        return answer;
+        return { ...answer, creds: used };
       } catch (err) {
+        if (err instanceof TrelloError) err.creds = used;
         if (err instanceof TrelloError && err.code === 'rate_limited') {
           this.startPause(err.retryAfter);
           await this.save();
@@ -607,6 +639,7 @@ export class App {
         throw err;
       } finally {
         this.timers.clearTimeout(timer);
+        this.controllers.delete(controller);
       }
     } finally {
       this.release();
@@ -630,13 +663,15 @@ export class App {
   /** GET /members/me with its open boards: the credentials check. */
   async readMember(gen, options = {}) {
     try {
-      const { body } = await this.ask(gen, 'GET', '/members/me', {
+      const { body, creds } = await this.ask(gen, 'GET', '/members/me', {
         query: MEMBER_QUERY,
         limit: MEMBER_BYTES,
         ...options,
       });
       const member = parseMember(body);
       if (gen !== this.generation) return undefined;
+      // Credentials changed while it was in flight: the answer is about the old ones.
+      if (creds !== credentialsOf(this.config)) throw this.outdated();
       this.member = { ...member, mono: this.monotonic() };
       this.memberError = undefined;
       this.memberStale = false;
@@ -650,8 +685,11 @@ export class App {
       return this.member;
     } catch (err) {
       if (gen !== this.generation) throw err;
+      if (err instanceof TrelloError && err.creds !== credentialsOf(this.config)) {
+        throw err.code === 'outdated' ? err : this.outdated();
+      }
       if (err instanceof TrelloError && err.code === 'unauthorized' && err.auth) {
-        await this.refuse(err.auth);
+        await this.refuse(err.auth, err.creds);
       } else if (err instanceof TrelloError && err.code === 'server') {
         this.startPause(err.retryAfter);
         await this.save();
@@ -659,6 +697,13 @@ export class App {
       if (err instanceof TrelloError && err.sent !== false) this.memberError = err.code;
       throw err;
     }
+  }
+
+  /** An answer to credentials replaced meanwhile: dropped, nothing decided on it. */
+  outdated() {
+    const err = new TrelloError('outdated', 'Answer to replaced credentials', { sent: false });
+    err.creds = credentialsOf(this.config);
+    return err;
   }
 
   /**
@@ -695,14 +740,16 @@ export class App {
   async readBoard(gen, id, options = {}) {
     const state = this.boardState(id);
     try {
-      const { body } = await this.ask(gen, 'GET', `/boards/${id}`, {
+      const { body, creds } = await this.ask(gen, 'GET', `/boards/${id}`, {
         query: BOARD_QUERY,
         limit: BOARD_BYTES,
         ...options,
       });
       const snap = parseBoard(body, id);
       if (gen !== this.generation) return undefined;
-      const previous = state.snap;
+      if (creds !== credentialsOf(this.config)) throw this.outdated();
+      // A reading too old to compare with (a long failure) fires no "card moved".
+      const previous = this.isFresh(state) ? state.snap : undefined;
       state.snap = snap;
       state.readMono = this.monotonic();
       state.failures = 0;
@@ -713,10 +760,15 @@ export class App {
         if (own.until <= state.readMono) this.ownMoves.delete(card);
       }
       const events = moveEvents(previous, snap, this.ownMoves, state.readMono);
+      // An own move seen in its list is done: a later real move there fires again.
+      for (const [cardId, own] of this.ownMoves) {
+        if (snap.cards.get(cardId)?.idList === own.list) this.ownMoves.delete(cardId);
+      }
       this.track(this.publishEvents(gen, events));
       return snap;
     } catch (err) {
       if (gen !== this.generation || !(err instanceof TrelloError) || err.sent === false) throw err;
+      if (err.creds !== credentialsOf(this.config)) throw this.outdated();
       state.failures += 1;
       state.error = err.code;
       // Read again after the interval doubled at each failure, an hour at most,
@@ -820,19 +872,45 @@ export class App {
     for (const id of [...this.boards.keys()]) if (!wanted.has(id)) this.boards.delete(id);
   }
 
-  /** The boards read, followed ones only. */
-  readBoards() {
+  /** How old a reading may be to decide on it: 3 intervals, 30 min at least. */
+  maxAge() {
+    return Math.max(3 * this.interval(), STALE_MIN);
+  }
+
+  /** "Card due" decides on tighter readings: one missed reading tolerated (2 intervals + 1 min). */
+  triggerAge() {
+    return 2 * this.interval() + DUE_TICK;
+  }
+
+  isFresh(state, maxAge = this.maxAge()) {
+    return Boolean(state?.snap) && this.monotonic() - state.readMono <= maxAge;
+  }
+
+  /** The boards read recently enough (followed ones only): triggers, widget, actions decide on these. */
+  readBoards(maxAge = this.maxAge()) {
     const out = [];
     for (const b of this.followed()) {
-      const snap = b.id ? this.boards.get(b.id)?.snap : undefined;
-      if (snap) out.push(snap);
+      const state = b.id ? this.boards.get(b.id) : undefined;
+      if (this.isFresh(state, maxAge)) out.push(state.snap);
     }
     return out;
   }
 
+  /** Minutes since the newest reading when every one is too old, else undefined. */
+  staleMinutes() {
+    let newest;
+    for (const b of this.followed()) {
+      const state = b.id ? this.boards.get(b.id) : undefined;
+      if (state?.snap && (newest === undefined || state.readMono > newest)) newest = state.readMono;
+    }
+    if (newest === undefined || this.readBoards().length > 0) return undefined;
+    return Math.max(1, Math.round((this.monotonic() - newest) / MINUTE));
+  }
+
   /** A board read again shortly after a write sent without answer. */
   recheck(gen, id) {
-    if (this.recheckTimer) return;
+    // Never a timer after stop (an aborted write lands here once stopped).
+    if (this.recheckTimer || gen !== this.generation || !this.running) return;
     this.recheckTimer = this.timers.setTimeout(() => {
       this.recheckTimer = undefined;
       if (gen !== this.generation || !this.ready()) return;
@@ -905,7 +983,12 @@ export class App {
     if (gen !== this.generation || !this.running || !this.config) return;
     const now = this.dueNow();
     const grace = this.interval() + DUE_TICK;
-    const { events, marked } = dueEvents(this.readBoards(), this.announced, now, grace);
+    const { events, marked } = dueEvents(
+      this.readBoards(this.triggerAge()),
+      this.announced,
+      now,
+      grace,
+    );
     for (const key of marked) this.announced.set(key, Number(key.split('|')[1]));
     let pruned = false;
     for (const [key, due] of this.announced) {
@@ -944,19 +1027,27 @@ export class App {
     const unknown = followed.filter((b) => !b.id).map((b) => b.ref);
     if (unknown.length) notes.push(T.unknownBoards(cut(unknown.join(', '), 120)));
     if (this.config.tooMany) notes.push(T.tooMany);
+    if (this.config.badZone) notes.push(T.badZone(this.config.timeZone));
     if (ids.length === 0) return [false, T.noBoard];
     const states = ids.map((b) => this.boards.get(b.id));
     const read = states.filter((s) => s?.snap && !s.error).length;
     if (states.some((s) => s?.snap?.cut)) notes.push(T.cut);
     if (this.dataError) notes.push(T.dataError);
     const errors = states.filter((s) => s?.error).map((s) => s.error);
-    if (read === 0 && errors.length > 0 && !states.some((s) => s?.snap)) {
+    if (read === 0 && errors.length > 0) {
+      // Nothing read at the last attempt: never "Connected", the age of what is shown said.
+      const newest = Math.max(...states.filter((s) => s?.snap).map((s) => s.readMono));
+      if (Number.isFinite(newest)) {
+        notes.unshift(T.lastRead(Math.max(1, Math.round((this.monotonic() - newest) / MINUTE))));
+      }
       return [false, this.withNotes(T.allFailed(ids.length, errors[0]), notes)];
     }
     if (read === 0 && errors.length === 0 && !states.some((s) => s?.snap)) {
       return [true, this.withNotes(T.waitingFirst, notes)];
     }
     const overdue = dueCards(this.readBoards(), this.dueNow(), 0).filter((c) => c.overdue).length;
+    const stale = this.staleMinutes();
+    if (stale !== undefined) notes.unshift(T.stale(stale));
     if (errors.length > 0) {
       notes.unshift({
         en: `${errors.length} not read (${reason(errors[0]).en})`,
@@ -1063,9 +1154,10 @@ export class App {
     return new Error(T.nothingSent(why));
   }
 
-  errorOf(err) {
+  /** `write`: the failed request was the write itself (else a reading: nothing written). */
+  errorOf(err, write = true) {
     if (!(err instanceof TrelloError)) return err;
-    if (err.sent === false) return this.nothingSent(reason(err.code).en);
+    if (err.sent === false || !write) return this.nothingSent(reason(err.code).en);
     return new Error(T.refusedByTrello(reason(err.code).en));
   }
 
@@ -1080,7 +1172,7 @@ export class App {
       try {
         await this.readMember(gen, { action: true, deadline });
       } catch (err) {
-        throw this.errorOf(err);
+        throw this.errorOf(err, false);
       }
       if (!this.member) throw this.nothingSent(reason('stopped').en);
     }
@@ -1093,11 +1185,14 @@ export class App {
   async snapFor(gen, id, deadline, maxAge = Infinity) {
     const state = this.boards.get(id);
     if (state?.snap && this.monotonic() - state.readMono < maxAge) return state.snap;
+    let snap;
     try {
-      return await this.readBoard(gen, id, { action: true, deadline });
+      snap = await this.readBoard(gen, id, { action: true, deadline });
     } catch (err) {
-      throw this.errorOf(err);
+      throw this.errorOf(err, false);
     }
+    if (!snap) throw this.nothingSent(reason('stopped').en);
+    return snap;
   }
 
   /** Adds or updates a card in a board read (no "card moved" for a change made here). */
@@ -1268,7 +1363,10 @@ export class App {
     const gen = this.generation;
     this.requireReady(gen);
     let boards = this.readBoards();
-    if (boards.length === 0) throw this.nothingSent(T.notRead);
+    if (boards.length === 0) {
+      const stale = this.staleMinutes();
+      throw this.nothingSent(stale === undefined ? T.notRead : T.stale(stale).en);
+    }
     let listId;
     if (fields.board) {
       const { item, error } = findBoard(boards, fields.board);
@@ -1320,7 +1418,10 @@ export class App {
       return messageWidget(this.config ? T.missing : T.starting, lang);
     if (this.credentialsRefused()) return messageWidget(T.refused(this.refused.kind), lang);
     let boards = this.readBoards();
-    if (boards.length === 0) return messageWidget(T.widgetNotRead, lang);
+    if (boards.length === 0) {
+      const stale = this.staleMinutes();
+      return messageWidget(stale === undefined ? T.widgetNotRead : T.stale(stale), lang);
+    }
     if (typeof settings.board === 'string' && settings.board.trim()) {
       const { item } = findBoard(boards, settings.board);
       boards = item ? [item] : [];

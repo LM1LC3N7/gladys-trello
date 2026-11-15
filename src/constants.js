@@ -101,6 +101,11 @@ export const SKEW_MAX = 12 * HOUR;
 export const WIDGET_ITEMS = 8;
 export const LIST_TEXT_MAX = 2000;
 
+/** A reading older than max(3 intervals, this) is not decided on (triggers, widget, actions). */
+export const STALE_MIN = 30 * MINUTE;
+/** stop() returns within this (Docker gives 10 s after SIGTERM). */
+export const STOP_BUDGET = 3 * SECOND;
+
 /** /data: one small JSON file. */
 export const MAX_STATE_BYTES = 1024 * 1024;
 export const STORE_RETRY = 10 * SECOND;

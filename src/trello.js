@@ -17,6 +17,20 @@ const CONTROLS = /[\u0000-\u001f\u007f]+/g;
 const invalid = (what) =>
   new TrelloError('invalid', `Unexpected Trello answer (${what})`, { sent: 'unknown' });
 
+/**
+ * At most `max` UTF-16 units (what Gladys and Trello count), cut between two
+ * characters (never half an emoji), "…" when cut.
+ */
+export function cutText(text, max) {
+  if (text.length <= max) return text;
+  let out = '';
+  for (const ch of text) {
+    if (out.length + ch.length > max - 1) break;
+    out += ch;
+  }
+  return `${out}…`;
+}
+
 /** A text from Trello: controls replaced by spaces, trimmed, cut at `max` characters. */
 export function clean(value, max = NAME_MAX) {
   if (typeof value !== 'string') return '';
@@ -25,8 +39,7 @@ export function clean(value, max = NAME_MAX) {
     .replace(CONTROLS, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  const chars = [...text];
-  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : text;
+  return cutText(text, max);
 }
 
 /** For matching: accents and case ignored, spaces collapsed. */

@@ -51,7 +51,8 @@ Onglet **Configuration** de l’intégration :
   est « bientôt due ».
 - **Fuseau horaire des dates affichées** : `Europe/Paris` par défaut. Trello donne
   des instants ; ce fuseau sert seulement à écrire les dates du widget et des
-  textes de scène.
+  textes de scène. Un nom inconnu de Node est remplacé par le fuseau par défaut,
+  et le statut le dit.
 
 Le bouton **Tester la connexion** lit votre compte et affiche vos tableaux ouverts,
 les tableaux suivis et le nombre de cartes en retard et bientôt dues.
@@ -81,7 +82,9 @@ environ 4 requêtes toutes les 5 minutes.
 Widget **Cartes Trello à échéance** : deux tuiles (en retard, bientôt dues) et
 jusqu’à 8 cartes, les cartes en retard d’abord, puis par échéance, avec leur
 tableau et leur liste ; chaque carte ouvre sa carte Trello. Réglage facultatif :
-un seul tableau. Le widget lit la dernière lecture (aucune requête) ; il est
+un seul tableau. Le widget lit la dernière lecture (aucune requête ; au-delà de
+3 intervalles, 30 min au moins, il affiche « données Trello périmées » avec l’âge
+de la dernière lecture) ; il est
 rafraîchi quand ce qu’il montre change.
 
 Une carte « en retard » a une échéance passée et n’est pas marquée terminée dans
@@ -91,7 +94,8 @@ Trello (la case de l’échéance), quelle que soit sa liste.
 
 - **Carte Trello à échéance** : une carte d’un tableau suivi atteint son échéance
   et n’est pas marquée terminée. Vérifié chaque minute, sans requête, sur la
-  dernière lecture. Une fois par carte et par échéance (une échéance repoussée
+  dernière lecture si elle a au plus deux intervalles et une minute (un tableau
+  en échec plus longtemps, ou des identifiants refusés, ne déclenchent rien). Une fois par carte et par échéance (une échéance repoussée
   redéclenche à la nouvelle date). Une échéance déjà passée de plus d’un intervalle
   et une minute quand la carte est lue pour la première fois (premier démarrage,
   tableau longtemps non lu, carte créée en retard) ne déclenche rien : jamais
@@ -100,7 +104,10 @@ Trello (la case de l’échéance), quelle que soit sa liste.
 - **Carte Trello déplacée** : une carte d’un tableau suivi est passée dans une autre
   liste entre deux lectures. La première lecture ne déclenche rien ; les
   déplacements faits par l’action « Déplacer une carte Trello » ne le déclenchent
-  pas (pas de boucle de scène).
+  pas (pas de boucle de scène) ; dès qu’une lecture montre la carte dans cette
+  liste, un vrai déplacement ultérieur vers elle redéclenche. Une lecture de plus
+  de 3 intervalles (30 min au moins) n’est pas comparée : les déplacements d’une
+  longue panne ne déclenchent rien.
 
 Filtres : le **nom du tableau** et le **nom de la liste**, exactement comme dans
 Trello (Gladys compare les textes à l’identique ; vide : tous).
@@ -108,7 +115,9 @@ Trello (Gladys compare les textes à l’identique ; vide : tous).
 Variables : carte (`name`), tableau, liste, échéance (`due`, ISO 8601 en UTC, et
 `due_local`, par exemple `2026-11-15 18:00` dans le fuseau configuré), lien de la
 carte, étiquettes (échéance) ou liste de départ (déplacée). Au plus 20 événements
-de chaque sorte par lecture ou par minute.
+de chaque sorte par lecture ou par minute : les échéances en plus attendent la
+minute suivante, les déplacements au-delà de 20 dans une même lecture ne sont pas
+envoyés.
 
 ## Actions de scène
 
@@ -129,7 +138,8 @@ de chaque sorte par lecture ou par minute.
   liste.
 - **Lire les cartes Trello à échéance** : les cartes en retard et bientôt dues
   (ou seulement l’un des deux), d’un tableau ou d’une liste au choix, d’après la
-  dernière lecture (aucune requête). Sorties : `count`, `overdue_count`,
+  dernière lecture (aucune requête ; au-delà de 3 intervalles, 30 min au moins,
+  l’action échoue en disant que les données sont périmées). Sorties : `count`, `overdue_count`,
   `soon_count`, `list` (une carte par ligne avec tableau, liste et échéance),
   `next_name`, `next_due`.
 

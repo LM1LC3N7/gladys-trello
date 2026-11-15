@@ -8,7 +8,7 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 
 /** The reason of a failed request, as users read it. */
 export const REASONS = {
-  unauthorized: both('access refused to this board (401)', 'accès refusé à ce tableau (401)'),
+  unauthorized: both('access refused (401)', 'accès refusé (401)'),
   forbidden: both('access refused (403)', 'accès refusé (403)'),
   not_found: both('not found (deleted or no access)', 'introuvable (supprimé ou sans accès)'),
   bad_request: both('request refused by Trello', 'requête refusée par Trello'),
@@ -101,6 +101,18 @@ export const T = {
     'un tableau a plus de 1 000 cartes ouvertes : le reste n’est pas lu',
   ),
   dataError: both('/data cannot be written', '/data non inscriptible'),
+  stale: (minutes) =>
+    both(
+      `Trello data out of date: last reading ${minutes} min ago`,
+      `données Trello périmées : dernière lecture il y a ${minutes} min`,
+    ),
+  lastRead: (minutes) =>
+    both(`last reading ${minutes} min ago`, `dernière lecture il y a ${minutes} min`),
+  badZone: (zone) =>
+    both(
+      `time zone not known: dates shown in ${zone}`,
+      `fuseau horaire inconnu : dates affichées en ${zone}`,
+    ),
 
   // Test button.
   testOk: (who, boards, followed, overdue, soon, hours) =>

@@ -192,8 +192,8 @@
         "fr": "Carte Trello à échéance"
       },
       "description": {
-        "en": "A card of a followed board reached its due date and is not marked complete. Checked every minute; a due already past when the card is first read (after a restart, a board unread for a while) does not fire.",
-        "fr": "Une carte d’un tableau suivi a atteint son échéance et n’est pas marquée terminée. Vérifié chaque minute ; une échéance déjà passée quand la carte est lue pour la première fois (après un redémarrage, un tableau longtemps non lu) ne déclenche rien."
+        "en": "A card of a followed board reached its due date and is not marked complete. Checked every minute on a recent reading; a due already past by more than the reading interval and a minute when the card is first read (after a restart, a board unread for a while) does not fire.",
+        "fr": "Une carte d’un tableau suivi a atteint son échéance et n’est pas marquée terminée. Vérifié chaque minute sur une lecture récente ; une échéance déjà passée de plus d’un intervalle de lecture et une minute quand la carte est lue pour la première fois (après un redémarrage, un tableau longtemps non lu) ne déclenche rien."
       },
       "fields": [
         {

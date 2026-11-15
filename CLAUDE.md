@@ -54,7 +54,11 @@ oauth_consumer_key="…", oauth_token="…"` header, never in a URL, a log, a
   alone.
 - **Writes never retried**: a create or move without answer is `unconfirmed`,
   the board read back; `moved` only when the answer shows the new list.
-- **No scene loop**: a move made through Gladys is in `ownMoves` before it leaves.
+- **No scene loop**: a move made through Gladys is in `ownMoves` before it
+  leaves, consumed by the first reading that shows the card in that list.
+- **Fresh readings only**: "card due" on readings <= 2 intervals + 1 min old,
+  widget/actions/status <= max(3 intervals, 30 min); an answer to replaced
+  credentials decides nothing; `stop()` returns within 3 s.
 - **Keys are forever**: config, action, widget, trigger, field, variable and
   output keys are stored in user scenes and dashboards.
 - Bilingual texts (en/fr), CHANGELOG `[Unreleased]`, versions by the Release

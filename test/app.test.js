@@ -209,7 +209,7 @@ test('a 401 on one board is that board not read, never a refusal; the other boar
   assert.equal(env.status().connected, true);
   assert.match(
     statusText(env),
-    /1\/2 boards read, 0 overdue cards; 1 not read \(access refused to this board/,
+    /1\/2 boards read, 0 overdue cards; 1 not read \(access refused \(401\)/,
   );
   const homeReads = () => env.trello.requests.filter((r) => r.id === BOARD_HOME).length;
   const workReads = () => env.trello.requests.filter((r) => r.id === BOARD_WORK).length;

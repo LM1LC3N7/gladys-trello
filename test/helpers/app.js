@@ -206,6 +206,7 @@ export async function setup({
 
 /** Stops the app and lets everything settle (t.after). */
 export async function teardown(env) {
-  await env.app.stop();
+  // The clock moves meanwhile: a stop bounded on the virtual timers ends.
+  await env.run(env.app.stop());
   await env.app.idle();
 }

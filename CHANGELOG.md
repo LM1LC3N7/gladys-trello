@@ -19,7 +19,8 @@ the notes of the version's GitHub Release.
 - Dashboard widget "Trello cards due": tiles overdue / due soon, the cards with
   their board, list and due date, each opening its card.
 - Scene triggers "Trello card due" (once per card and due date, never for a due
-  already past when first read) and "Trello card moved" (not for the moves made
+  already past by more than the interval and a minute when first read, never
+  on a reading older than two intervals and a minute) and "Trello card moved" (not for the moves made
   through Gladys).
 - Scene actions "Create a Trello card" (never sent twice; "unconfirmed" when
   Trello does not answer), "Move a Trello card" (by link or name; "moved" only
@@ -32,4 +33,9 @@ the notes of the version's GitHub Release.
   fails is read again later without stopping the others.
 - Refused credentials (a 401 on the member naming the key or the token) kept in
   /data as 8 bits of a salted hash: nothing more is asked until they change or
-  the test button succeeds.
+  the test button succeeds. An answer to credentials replaced meanwhile decides
+  nothing.
+- Readings older than 3 intervals (30 min at least) are not shown: the widget,
+  "Read the Trello cards due" and the status say the data is out of date.
+- `stop()` returns within 3 s: the request in flight is aborted, the last save
+  bounded.
