@@ -78,3 +78,4 @@
 - The widget icon is the generic Feather `columns`, never a Trello logo.
 - `.github/workflows/ci.yml`: `timeout-minutes: 30` on the jobs (a hung test
   never holds a runner for 6 h).
+- [ ] r3 cosmétique : déplacer le commentaire « An answer to credentials replaced meanwhile » de replaced() vers outdated() (src/app.js).
