@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-19
+
 ### Added
 
 - Trello boards through the official REST API (`api.trello.com/1`), with the API
@@ -39,3 +41,6 @@ the notes of the version's GitHub Release.
   "Read the Trello cards due" and the status say the data is out of date.
 - `stop()` returns within 3 s: the request in flight is aborted, the last save
   bounded.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-trello/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-trello/releases/tag/v0.1.1

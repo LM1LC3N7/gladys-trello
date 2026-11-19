@@ -1,6 +1,6 @@
 {
   "name": "gladys-trello",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Trello cards due and overdue in Gladys Assistant, and cards created or moved from the scenes, through the official REST API (unofficial).",
   "type": "module",
