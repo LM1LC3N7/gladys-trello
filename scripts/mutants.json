@@ -218,14 +218,14 @@
   {
     "name": "app: member answer of replaced credentials kept",
     "file": "src/app.js",
-    "from": "      if (creds !== credentialsOf(this.config)) throw this.outdated();\n      this.member",
-    "to": "      this.member"
+    "from": "      if (creds !== credentialsOf(this.config)) throw this.outdated();\n      const member",
+    "to": "      const member"
   },
   {
     "name": "app: member error of replaced credentials decides",
     "file": "src/app.js",
-    "from": "      if (err instanceof TrelloError && err.creds !== credentialsOf(this.config)) {",
-    "to": "      if (false) {"
+    "from": "      if (this.replaced(err)) {\n        throw err.code",
+    "to": "      if (false) {\n        throw err.code"
   },
   {
     "name": "app: readings kept after a refusal",
@@ -292,5 +292,47 @@
     "file": "src/config.js",
     "from": "text(value[CONFIG_TZ]) !== '' && timeZoneOf",
     "to": "false && timeZoneOf"
+  },
+  {
+    "name": "app: an error without credentials taken for replaced ones",
+    "file": "src/app.js",
+    "from": "(err.creds !== undefined && err.creds !== credentialsOf(this.config))",
+    "to": "err.creds !== credentialsOf(this.config)"
+  },
+  {
+    "name": "app: stop does not release the waiters",
+    "file": "src/app.js",
+    "from": "    for (const waiter of this.waiters.splice(0)) waiter(false);\n",
+    "to": ""
+  },
+  {
+    "name": "app: stop waits for the jobs unbounded",
+    "file": "src/app.js",
+    "from": "await this.within(Promise.allSettled([...this.jobs]), STOP_BUDGET / 2);",
+    "to": "await Promise.allSettled([...this.jobs]);"
+  },
+  {
+    "name": "app: no 30-min floor for the widget",
+    "file": "src/app.js",
+    "from": "Math.max(3 * this.interval(), STALE_MIN)",
+    "to": "3 * this.interval()"
+  },
+  {
+    "name": "app: no out-of-date note in the status",
+    "file": "src/app.js",
+    "from": "    if (stale !== undefined) notes.unshift(T.stale(stale));\n",
+    "to": ""
+  },
+  {
+    "name": "app: a failed reading in an action called a Trello refusal",
+    "file": "src/app.js",
+    "from": "if (err.sent === false || !write) return",
+    "to": "if (err.sent === false) return"
+  },
+  {
+    "name": "app: snapFor without a reading",
+    "file": "src/app.js",
+    "from": "    if (!snap) throw this.nothingSent(reason('stopped').en);\n",
+    "to": ""
   }
 ]

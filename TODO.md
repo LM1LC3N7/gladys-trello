@@ -3,7 +3,8 @@
 ## Before announcing
 
 - [x] Review r1 (high): I1-I4 and M1-M6 fixed; M7 documented (see Decisions).
-- [ ] Review r2.
+- [x] Review r2: R2-1 fixed, missing guard tests added.
+- [ ] Review r3.
 - [ ] Turn on "Private vulnerability reporting" (SECURITY.md points there).
 - [ ] Add the `gladys-assistant-integration` topic at publication only.
 - [ ] Store field not set in the manifest: `keywords` (Trello, kanban, cartes,
@@ -33,11 +34,15 @@
 - Review r1, M7: the "card moved" events beyond 20 in one reading are not sent
   (the next reading compares with the new list); said in the docs. Keeping them
   for later would need a queue of past moves, not worth it for v1.
-- Review r1, equivalent mutants (not killed): `isOverdue` `<=` vs `<` (equality
-  never reached with a moving clock), the badge cut at 16 (11 characters at
-  most), and the pair "stop does not release the waiters" / "a waiter given
-  without the generation check": each alone is covered by the other and by the
-  abort of the request in flight.
+- Equivalent mutants (not killed): `isOverdue` `<=` vs `<` (equality never
+  reached with a moving clock), the badge cut at 16 (11 characters at most),
+  the generation check of a waiter while `stop()` empties the queue (the queue
+  emptying is the guard, tested), and the credentials set on an unreadable
+  answer (an error without credentials is already taken as the current ones;
+  kept so the error says which credentials it is about).
+- Review r2: an error is about replaced credentials only when it carries the
+  credentials of its request and they differ from the current ones (a refusal
+  before sending or an unreadable answer is about the current ones).
 - Freshness: "card due" decides on readings at most 2 intervals + 1 min old;
   the widget, "Read the Trello cards due" and the status on readings at most
   max(3 intervals, 30 min) old, then say the data is out of date. A refusal

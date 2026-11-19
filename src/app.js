@@ -668,10 +668,10 @@ export class App {
         limit: MEMBER_BYTES,
         ...options,
       });
-      const member = parseMember(body);
       if (gen !== this.generation) return undefined;
       // Credentials changed while it was in flight: the answer is about the old ones.
       if (creds !== credentialsOf(this.config)) throw this.outdated();
+      const member = this.parsed(() => parseMember(body), creds);
       this.member = { ...member, mono: this.monotonic() };
       this.memberError = undefined;
       this.memberStale = false;
@@ -685,7 +685,7 @@ export class App {
       return this.member;
     } catch (err) {
       if (gen !== this.generation) throw err;
-      if (err instanceof TrelloError && err.creds !== credentialsOf(this.config)) {
+      if (this.replaced(err)) {
         throw err.code === 'outdated' ? err : this.outdated();
       }
       if (err instanceof TrelloError && err.code === 'unauthorized' && err.auth) {
@@ -700,6 +700,29 @@ export class App {
   }
 
   /** An answer to credentials replaced meanwhile: dropped, nothing decided on it. */
+  /**
+   * The error is about credentials replaced since its request left. Only an
+   * error that says which credentials it carried can be: a refusal before
+   * sending, or one without them, is about the current ones.
+   */
+  replaced(err) {
+    return (
+      err instanceof TrelloError &&
+      (err.code === 'outdated' ||
+        (err.creds !== undefined && err.creds !== credentialsOf(this.config)))
+    );
+  }
+
+  /** Reads an answer; an unreadable one is an error about the credentials it was asked with. */
+  parsed(read, creds) {
+    try {
+      return read();
+    } catch (err) {
+      if (err instanceof TrelloError) err.creds = creds;
+      throw err;
+    }
+  }
+
   outdated() {
     const err = new TrelloError('outdated', 'Answer to replaced credentials', { sent: false });
     err.creds = credentialsOf(this.config);
@@ -745,9 +768,9 @@ export class App {
         limit: BOARD_BYTES,
         ...options,
       });
-      const snap = parseBoard(body, id);
       if (gen !== this.generation) return undefined;
       if (creds !== credentialsOf(this.config)) throw this.outdated();
+      const snap = this.parsed(() => parseBoard(body, id), creds);
       // A reading too old to compare with (a long failure) fires no "card moved".
       const previous = this.isFresh(state) ? state.snap : undefined;
       state.snap = snap;
@@ -768,7 +791,7 @@ export class App {
       return snap;
     } catch (err) {
       if (gen !== this.generation || !(err instanceof TrelloError) || err.sent === false) throw err;
-      if (err.creds !== credentialsOf(this.config)) throw this.outdated();
+      if (this.replaced(err)) throw this.outdated();
       state.failures += 1;
       state.error = err.code;
       // Read again after the interval doubled at each failure, an hour at most,
@@ -1101,6 +1124,8 @@ export class App {
           : T.badToken;
     }
     const mono = this.monotonic();
+    // A pause says itself, even when a fresh member could be shown.
+    if (this.pause && this.pause.due > mono) return T.testFailed('paused');
     const fresh =
       this.member &&
       !this.memberStale &&

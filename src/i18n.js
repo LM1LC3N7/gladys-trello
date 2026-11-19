@@ -25,6 +25,7 @@ export const REASONS = {
   refused: both('credentials refused', 'identifiants refusés'),
   not_ready: both('not configured', 'non configuré'),
   stopped: both('integration stopping', 'intégration en cours d’arrêt'),
+  outdated: both('answer to replaced credentials', 'réponse à des identifiants remplacés'),
   deadline: both(
     'no time left before the scene deadline',
     'plus le temps avant la limite de la scène',

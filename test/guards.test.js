@@ -467,3 +467,144 @@ test('answers to replaced credentials: no refusal, no pause', async (t) => {
   assert.equal(env.app.pause, undefined, 'a 5xx to the old token pauses nothing');
   assert.ok(env.trello.requests.some((r) => usesToken(r, TOKEN2) && r.kind === 'board'));
 });
+
+// --- Review r2 -------------------------------------------------------------------------------
+
+test('an unreadable board among two: the other read, the bad one spaced and said', async (t) => {
+  const env = await start(t, {
+    boards: [home([]), work()],
+    prepare: ({ trello }) => {
+      trello.onBoard = (r) => (r.id === BOARD_HOME ? { ...work(), id: 'b'.repeat(24) } : undefined);
+    },
+  });
+  const reads = (id) => env.trello.requests.filter((r) => r.id === id).length;
+  await env.wait(10 * MINUTE + SECOND);
+  assert.equal(reads(BOARD_WORK), 3, 'the other board at every reading');
+  assert.equal(reads(BOARD_HOME), 2, 'the unreadable one spaced (5 then 10 min)');
+  assert.match(
+    statusText(env),
+    /1\/2 boards read, 0 overdue cards; 1 not read \(unreadable answer\)/,
+  );
+});
+
+test('an unreadable member: "unreadable answer", never "replaced credentials"', async (t) => {
+  const env = await start(t, {
+    prepare: ({ trello }) => {
+      trello.onMember = () => ({ username: 'no id' });
+    },
+  });
+  assert.equal(env.app.memberError, 'invalid');
+  assert.match(statusText(env), /^Trello not read: unreadable answer/);
+});
+
+test('the test button during a pause says the pause, fresh member or not', async (t) => {
+  const fresh = await start(t, {
+    prepare: ({ trello }) => {
+      trello.onBoard = () => text('slow down', 429, { 'retry-after': '600' });
+    },
+  });
+  const now = await fresh.run(fresh.gladys.fake.action('test_connection'));
+  assert.match(now.data.message.en, /^Test failed: paused/);
+  const env = await start(t, {
+    prepare: ({ trello }) => {
+      trello.onMember = () => text('slow down', 429, { 'retry-after': '1800' });
+    },
+  });
+  await env.wait(MINUTE);
+  const ack = await env.run(env.gladys.fake.action('test_connection'));
+  assert.match(ack.data.message.en, /^Test failed: paused after a Trello slow-down request/);
+});
+
+test('the widget keeps a reading 30 min even with a 2-min interval, then says out of date', async (t) => {
+  let failing = false;
+  const env = await start(t, {
+    config: { api_key: KEY, api_token: TOKEN, poll_minutes: 2 },
+    boards: [home([card(1, { name: 'Appeler', due: NOW - HOUR })])],
+    prepare: ({ trello }) => {
+      trello.onBoard = () => (failing ? text('oops', 500) : undefined);
+    },
+  });
+  failing = true;
+  await env.wait(25 * MINUTE);
+  const kept = (await env.gladys.fake.widgetGet('cards', {})).data.content;
+  assert.ok(
+    kept.components.some((c) => c.type === 'card-list'),
+    'still shown at 25 min',
+  );
+  await env.wait(10 * MINUTE);
+  const old = (await env.gladys.fake.widgetGet('cards', {})).data.content;
+  assert.match(old.components[0].text, /Trello data out of date/);
+});
+
+test('stop: under 3 s while Gladys does not answer an event', async (t) => {
+  const env = await start(t, { boards: [home([card(1, { due: NOW + 3 * MINUTE })])] });
+  env.gladys.publishSceneEvent = () => new Promise(() => {});
+  await env.wait(3 * MINUTE + 5 * SECOND);
+  const t0 = env.clock.elapsed;
+  const stopped = await env.run(env.app.stop().then(() => env.clock.elapsed));
+  assert.ok(stopped - t0 <= 3 * SECOND, `${stopped - t0} ms`);
+});
+
+test('the status says the readings are out of date', async (t) => {
+  const env = await start(t);
+  env.app.boards.get(BOARD_HOME).readMono -= 40 * MINUTE;
+  await env.app.publishStatus();
+  assert.match(statusText(env), /Trello data out of date: last reading 40 min ago/);
+});
+
+test('a reading that fails during an action is "nothing sent", never "refused by Trello"', async (t) => {
+  const env = await start(t, { boards: [home([card(1, { name: 'A' })])] });
+  await env.wait(2 * MINUTE);
+  env.trello.onBoard = () => text('oops', 500);
+  const ack = await env.run(
+    env.gladys.fake.sceneAction('move_card', { board: 'Maison', card: 'A', list: 'Terminé' }),
+  );
+  assert.match(ack.error, /^Nothing sent to Trello: Trello server error/);
+  assert.equal(env.trello.count('put'), 0);
+});
+
+test('an action whose board answer comes after stop: "integration stopping"', async (t) => {
+  const env = await start(t, { boards: [home([card(1, { name: 'A' })])] });
+  await env.wait(2 * MINUTE);
+  const held = deferred();
+  env.trello.onBoard = () => held.promise; // ignores the abort, answers later
+  const action = env.app.moveCard({ board: 'Maison', card: 'A', list: 'Terminé' }).catch((e) => e);
+  await env.app.idle();
+  await env.app.stop();
+  held.resolve(undefined);
+  const err = await action;
+  assert.match(err.message, /Nothing sent to Trello: integration stopping/);
+});
+
+test('stop with a request in flight and one queued: the slot is not leaked after a reconnection', async (t) => {
+  const env = await start(t, { boards: [home([])] });
+  const held = deferred();
+  env.trello.onPost = () => held.promise;
+  const first = env.app.createCard({ board: 'Maison', list: 'À faire', name: 'a' }).catch((e) => e);
+  await env.app.idle();
+  const queued = env.app
+    .createCard({ board: 'Maison', list: 'À faire', name: 'b' })
+    .catch((e) => e);
+  await env.app.idle();
+  await env.run(env.app.stop());
+  held.resolve(undefined);
+  env.trello.onPost = undefined;
+  await Promise.all([first, queued]);
+  await env.app.connected();
+  await env.wait(2 * SECOND);
+  const later = await env.run(
+    env.app.createCard({ board: 'Maison', list: 'À faire', name: 'later' }).catch((e) => e),
+  );
+  assert.equal(later.created, true, String(later.message ?? ''));
+  assert.equal(env.app.busy, false);
+});
+
+test('replaced credentials: only an error carrying other credentials than the current ones', async (t) => {
+  const { TrelloError } = await import('../src/http.js');
+  const env = await start(t);
+  const current = `${KEY}\u0000${TOKEN}`;
+  const err = (creds) => Object.assign(new TrelloError('paused', 'x', { sent: false }), { creds });
+  assert.equal(env.app.replaced(err(undefined)), false, 'refused before sending: the current ones');
+  assert.equal(env.app.replaced(err(current)), false);
+  assert.equal(env.app.replaced(err(`${KEY}\u0000${TOKEN2}`)), true);
+});
