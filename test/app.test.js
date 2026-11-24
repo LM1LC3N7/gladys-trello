@@ -63,7 +63,7 @@ test('start: the member then the board, credentials in the Authorization header 
     );
     assert.match(
       r.headers['User-Agent'],
-      /^gladys-trello\/0\.1\.0 \(\+https:\/\/github\.com\/LM1LC3N7\/gladys-trello\)$/,
+      /^gladys-trello\/\d+\.\d+\.\d+ \(\+https:\/\/github\.com\/LM1LC3N7\/gladys-trello\)$/,
     );
     assert.equal(r.headers.Accept, 'application/json');
     assert.equal(r.init.redirect, 'error');
